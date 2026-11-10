@@ -3,3 +3,8 @@
 .obsidian/
 node_modules/
 .DS_Store
+
+# Secrets (the Supabase secret / service_role key must never be committed)
+.env
+.env.*
+*.secret
