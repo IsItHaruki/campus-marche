@@ -4,6 +4,10 @@ A students-only marketplace for 兵庫県立大学 (University of Hyogo). Studen
 
 **Live:** https://campus-marche-khaki.vercel.app/ (Vercel deploys every push to `main`)
 
+## How people join right now
+
+`config.js` has `loginMode: 'invite'`. Friends open the link, tap 招待コードで参加 (Join with invite code), and enter the code plus a nickname. They don't need an email. The code is stored only in Supabase (`public.invite_codes`) and checked by `join_with_code()`. It never goes in this repo, because the repo is public. Add or switch off codes with the queries at the bottom of `supabase/admin.sql`. To switch to university email login later, set `loginMode: 'email'` and set up SMTP (`SETUP.md` step 6).
+
 ## Run it locally
 
 - **Demo mode:** open `index.html`. With `config.js` empty, the app uses fake students and keeps data in your browser.
