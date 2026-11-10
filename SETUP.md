@@ -78,14 +78,15 @@ Supabase's built-in email sender is for testing only. It sends very few emails p
 
 ## 7. Put it online
 
-The app is just files (no server to run), so any static host works:
+The app is already live on GitHub Pages: **https://isitharuki.github.io/campus-marche/**
 
-- **Netlify Drop:** go to https://app.netlify.com/drop and drag this folder onto the page. You get a link like `campus-marche.netlify.app`.
-- **Or** GitHub Pages / Cloudflare Pages.
+Every push to the `main` branch updates the site within about a minute.
 
-Then in Supabase → **Authentication → URL Configuration**, set **Site URL** to your new link.
+In Supabase → **Authentication → URL Configuration**:
+- **Site URL:** `https://isitharuki.github.io/campus-marche/`
+- **Redirect URLs:** add `https://isitharuki.github.io/campus-marche/**` and `http://localhost:3457/**`
 
-Share the link in the LINE group and students can add it to their home screen.
+Share the link in the LINE group, and students can add it to their home screen.
 
 ## Checking it works
 
