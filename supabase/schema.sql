@@ -14,6 +14,9 @@ declare
   ending text;
   ok boolean := false;
 begin
+  -- Friends who join with an invite code have no email (anonymous sign-in). The invite code is
+  -- checked by join_with_code() below, and without it they can't see or do anything.
+  if coalesce(new.is_anonymous, false) then return new; end if;
   foreach ending in array allowed loop
     if lower(new.email) like '%@' || ending or lower(new.email) like '%.' || ending then ok := true; end if;
   end loop;
@@ -37,11 +40,14 @@ create table if not exists public.profiles (
   photo text,
   verified boolean not null default false,
   verification_status text not null default 'none',   -- none | pending | verified | rejected
+  invited boolean not null default false,              -- joined with an invite code (can post and message)
   is_admin boolean not null default false,
   deleted boolean not null default false,
   seed_handoffs int not null default 0,
   joined bigint not null default (extract(epoch from now()) * 1000)::bigint
 );
+
+alter table public.profiles add column if not exists invited boolean not null default false;
 
 create table if not exists public.user_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -185,6 +191,18 @@ language sql stable security definer set search_path = public as $$
   select coalesce((select is_admin from profiles where id = auth.uid()), false)
 $$;
 
+-- A member is someone who finished joining (has a profile). Signed-in visitors without one see nothing.
+create or replace function public.is_member() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid())
+$$;
+
+-- Who can post and message: students with a checked card, or friends who joined with an invite code.
+create or replace function public.can_trade() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and (verified or invited))
+$$;
+
 create or replace function public.is_thread_member(t_id text) returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from threads t where t.id = t_id and auth.uid() in (t.buyer_id, t.seller_id))
@@ -214,7 +232,8 @@ end $$;
 
 -- Profiles: every signed-in student can see profiles; you can only create/edit your own.
 create policy "profiles read" on public.profiles for select to authenticated using (true);
-create policy "profiles insert own" on public.profiles for insert to authenticated with check (id = auth.uid());
+create policy "profiles insert own" on public.profiles for insert to authenticated
+  with check (id = auth.uid() and not coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false));
 create policy "profiles update own" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
 -- Settings and saved searches are private.
@@ -229,7 +248,7 @@ create policy "blocks delete own" on public.blocks for delete to authenticated u
 -- Listings: everyone signed in can see them; only verified students can post; only the seller can edit.
 create policy "listings read" on public.listings for select to authenticated using (true);
 create policy "listings insert verified" on public.listings for insert to authenticated
-  with check (seller_id = auth.uid() and exists (select 1 from profiles p where p.id = auth.uid() and p.verified));
+  with check (seller_id = auth.uid() and public.can_trade());
 create policy "listings update own" on public.listings for update to authenticated using (seller_id = auth.uid()) with check (seller_id = auth.uid());
 
 -- Likes and views: anyone can read counts; you add/remove your own.
@@ -244,7 +263,7 @@ create policy "views insert own" on public.views for insert to authenticated wit
 -- Threads and messages: only the two people in the chat can see or write them.
 create policy "threads read members" on public.threads for select to authenticated using (auth.uid() in (buyer_id, seller_id));
 create policy "threads insert buyer" on public.threads for insert to authenticated
-  with check (buyer_id = auth.uid() and exists (select 1 from profiles p where p.id = auth.uid() and p.verified));
+  with check (buyer_id = auth.uid() and public.can_trade());
 create policy "threads update members" on public.threads for update to authenticated using (auth.uid() in (buyer_id, seller_id)) with check (auth.uid() in (buyer_id, seller_id));
 create policy "messages read members" on public.messages for select to authenticated using (public.is_thread_member(thread_id));
 create policy "messages insert members" on public.messages for insert to authenticated
@@ -273,16 +292,30 @@ create policy "reports read admin" on public.reports for select to authenticated
 create policy "events insert own" on public.events for insert to authenticated with check (user_id = auth.uid());
 create policy "events read admin" on public.events for select to authenticated using (public.is_admin());
 
+-- Members only: on top of the rules above, nobody without a profile can read or write anything.
+-- ("restrictive" means this must pass as well as the normal rule.)
+do $$ declare t text; begin
+  foreach t in array array['user_settings', 'saved_searches', 'blocks', 'listings', 'likes', 'favorites', 'views',
+                           'threads', 'messages', 'notifications', 'reviews', 'reports', 'events'] loop
+    execute format('create policy "members only" on public.%I as restrictive for all to authenticated using (public.is_member()) with check (public.is_member())', t);
+  end loop;
+end $$;
+create policy "members only read" on public.profiles as restrictive for select to authenticated using (public.is_member() or id = auth.uid());
+create policy "members only update" on public.profiles as restrictive for update to authenticated using (public.is_member());
+
 -- ---------- 5. Triggers ----------
 -- Students can't make themselves verified or admin. Only you (in the dashboard / SQL editor) can.
 create or replace function public.protect_profile() returns trigger language plpgsql as $$
 begin
   if coalesce(auth.role(), '') <> 'authenticated' then return new; end if;  -- dashboard / service role: allow
+  if current_setting('campus.joining', true) = 'yes' then return new; end if;  -- join_with_code() below
   if tg_op = 'INSERT' then
     new.verified := false; new.verification_status := 'none'; new.is_admin := false; new.seed_handoffs := 0;
+    new.invited := false;
     return new;
   end if;
   new.verified := old.verified;
+  new.invited := old.invited;
   new.is_admin := old.is_admin;
   new.seed_handoffs := old.seed_handoffs;
   if new.verification_status is distinct from old.verification_status
@@ -405,10 +438,10 @@ drop policy if exists "photos upload own folder" on storage.objects;
 drop policy if exists "cards upload own folder" on storage.objects;
 create policy "photos read" on storage.objects for select using (bucket_id = 'photos');
 create policy "photos upload own folder" on storage.objects for insert to authenticated
-  with check (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
+  with check (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text and public.is_member());
 -- Student cards: students can upload into their own folder, but nobody can read them except you in the dashboard.
 create policy "cards upload own folder" on storage.objects for insert to authenticated
-  with check (bucket_id = 'student-cards' and (storage.foldername(name))[1] = auth.uid()::text);
+  with check (bucket_id = 'student-cards' and (storage.foldername(name))[1] = auth.uid()::text and public.is_member());
 
 -- ---------- 7. Live updates (new messages and notifications appear without refreshing) ----------
 do $$
@@ -420,3 +453,50 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ---------- 8. Invite codes (testing with friends, before email login) ----------
+-- The codes live only in the database. Nobody can read this table from the app, so the code
+-- never appears in the website's files. Add or change codes in supabase/admin.sql.
+create table if not exists public.invite_codes (
+  code text primary key,
+  note text default '',
+  active boolean not null default true,
+  uses int not null default 0,
+  max_uses int,                         -- empty = unlimited
+  created_at timestamptz not null default now()
+);
+alter table public.invite_codes enable row level security;   -- no policies: unreadable from the app
+
+create table if not exists public.join_attempts (
+  user_id uuid not null,
+  at timestamptz not null default now()
+);
+alter table public.join_attempts enable row level security;  -- no policies: unreadable from the app
+
+create or replace function public.join_with_code(p_code text, p_name text, p_uni text, p_campus text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  c public.invite_codes;
+begin
+  if me is null then raise exception 'Not signed in'; end if;
+  if exists (select 1 from profiles where id = me) then return; end if;   -- already joined
+  if (select count(*) from join_attempts where user_id = me and at > now() - interval '1 hour') >= 5 then
+    raise exception 'Too many tries';
+  end if;
+  select * into c from invite_codes
+    where upper(code) = upper(trim(p_code)) and active and (max_uses is null or uses < max_uses);
+  if not found then
+    insert into join_attempts (user_id) values (me);
+    raise exception 'Invalid invite code';
+  end if;
+  if length(trim(coalesce(p_name, ''))) = 0 or length(p_name) > 24 then raise exception 'Invalid nickname'; end if;
+  perform set_config('campus.joining', 'yes', true);
+  insert into profiles (id, uni, campus, name, invited, joined)
+    values (me, coalesce(nullif(p_uni, ''), 'u-hyogo'), coalesce(nullif(p_campus, ''), 'kobe-shoka'), trim(p_name), true,
+            (extract(epoch from now()) * 1000)::bigint);
+  perform set_config('campus.joining', '', true);
+  update invite_codes set uses = uses + 1 where code = c.code;
+end $$;
+revoke all on function public.join_with_code(text, text, text, text) from public, anon;
+grant execute on function public.join_with_code(text, text, text, text) to authenticated;

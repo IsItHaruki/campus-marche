@@ -6,4 +6,6 @@
 window.CAMPUS_CONFIG = {
   supabaseUrl: 'https://sdncefqhecgcwoeztioo.supabase.co',
   supabaseAnonKey: 'sb_publishable_ClGXbo6VCavFoRI8WhGT9A_o2s6nNMR',
+  // 'invite': friends join with an invite code (no email). 'email': university email + 6-digit code.
+  loginMode: 'invite',
 };

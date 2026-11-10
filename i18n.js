@@ -24,6 +24,17 @@ const I18N = (() => {
     'Read': '既読', 'Online': 'オンライン', 'typing': '入力中',
     'Ratings open 1 day after the hand-off, so nobody has to rate on the spot. We\'ll send you a reminder.': '評価は受け渡しの1日後からできます。その場で評価しなくて大丈夫です。時間になったらお知らせします。',
     'Ratings open 1 day after the hand-off': '評価は受け渡しの1日後からできます', 'Demo: skip ahead 1 day': 'デモ：1日進める',
+    // invite code
+    'Join with invite code': '招待コードで参加', 'Ask the friend who shared this link for the code.': 'コードはこのリンクを教えてくれた人に聞いてください。',
+    'Join': '参加する', 'Joining…': '参加中…', 'Invite code': '招待コード',
+    'No email needed. Your account stays on this phone or browser.': 'メールは不要です。アカウントはこのスマホ（ブラウザ）に保存されます。',
+    'That looks like a real name. For your safety, please use a nickname. (Tap "Join" again to keep it.)': '本名のように見えます。安全のため、ニックネームにしましょう。（このまま使う場合は、もう一度「参加する」を押してください）',
+    "You joined with an invite code, so this account lives in this browser. If you log out or clear this site's data, you can't get back in.": '招待コードで参加したため、このアカウントはこのブラウザにだけ保存されています。ログアウトしたりサイトのデータを消したりすると、元に戻せません。',
+    "You joined with an invite code, so this account only lives in this browser. If you log out, you can't get back into it. Log out anyway?": '招待コードで参加したため、このアカウントはこのブラウザにだけ保存されています。ログアウトすると元に戻せません。ログアウトしますか？',
+    'That invite code is not right. Check it with the friend who shared the link.': '招待コードが違います。リンクを教えてくれた人に確認してください。',
+    'Too many wrong codes. Please wait an hour and try again.': '間違いが多すぎます。1時間ほど待ってからもう一度お試しください。',
+    'Joining is turned off right now. Ask the friend who shared the link.': '現在、参加を受け付けていません。リンクを教えてくれた人に聞いてください。',
+    'Post something or say hi to a seller.': '出品するか、出品者にメッセージを送ってみましょう。',
     // navigation
     'Home': 'ホーム', 'Notifications': 'お知らせ', 'Post': '出品', 'Messages': 'メッセージ', 'Me': 'マイページ',
     'Back': '戻る', 'Back to start': '最初に戻る', 'Go to home': 'ホームへ',
@@ -212,6 +223,7 @@ const I18N = (() => {
     P(/^(.+) \(a favorite seller\) posted: (.+) · (.+)$/, (m, n, t, p) => `お気に入りの${n}さんが出品しました：${t}・${tr(p)}`),
     P(/^Welcome to (.+)! (\d+) items are up for grabs on your campus right now\.$/, '$1へようこそ！今、あなたのキャンパスに$2件の商品があります。'),
     P(/^Welcome to (.+)! Verify your student card to start posting and messaging\.$/, '$1へようこそ！学生証を確認すると、出品とメッセージができるようになります。'),
+    P(/^Welcome to (.+)! Post something or say hi to a seller\.$/, '$1へようこそ！出品するか、出品者にメッセージを送ってみましょう。'), P(/^Welcome, (.+)$/, 'ようこそ、$1さん'),
     P(/^Your student card is verified\. You can post and message now\.$/, '学生証を確認しました。出品とメッセージができるようになりました。'),
     // chat system messages
     P(/^Meetup agreed: (.+)\. Item reserved\.$/, '待ち合わせが決まりました：$1。商品は取引中になりました。'),

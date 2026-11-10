@@ -32,3 +32,16 @@ order by r.at desc;
 -- 6. Test numbers for your 2-week trial.
 select type, count(*) from public.events group by type order by count(*) desc;
 select count(*) filter (where status = 'done') as handed_off, count(*) as posted from public.listings where status <> 'deleted';
+
+-- ---------- Invite codes (friends join without email) ----------
+-- Add a code (pick something hard to guess, e.g. MARCHE-7QK4). Never put it in the app's files.
+-- insert into public.invite_codes (code, note) values ('YOUR-CODE-HERE', 'friends test');
+
+-- See codes and how many people used each:
+-- select code, note, active, uses, max_uses from public.invite_codes;
+
+-- Turn a code off (people who already joined keep their accounts):
+-- update public.invite_codes set active = false where code = 'YOUR-CODE-HERE';
+
+-- See who joined with a code:
+-- select name, campus, to_timestamp(joined / 1000) as joined_at from public.profiles where invited order by joined desc;

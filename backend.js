@@ -44,7 +44,7 @@ const Backend = (() => {
   });
   const fromProfile = (r) => ({
     id: r.id, uni: r.uni, campus: r.campus, name: r.name, bio: r.bio, photo: r.photo,
-    verified: r.verified, verificationStatus: r.verification_status, isAdmin: r.is_admin, deleted: r.deleted,
+    verified: r.verified, invited: !!r.invited, verificationStatus: r.verification_status, isAdmin: r.is_admin, deleted: r.deleted,
     seedHandoffs: r.seed_handoffs, joined: r.joined, blocked: [],
   });
   const toListing = (l) => ({
@@ -137,7 +137,7 @@ const Backend = (() => {
     blocks.forEach((b) => byId[b.blocker]?.blocked.push(b.blocked));
     const mine = byId[id];
     if (mine) {
-      mine.email = session.user.email;
+      mine.email = session.user.email || '';
       mine.emailConfirmed = true;
       if (settings[0]) mine.settings = { notify: settings[0].notify || {} };
       mine.savedSearches = saved.map((s) => ({ id: s.id, q: s.q, at: s.at }));
@@ -258,6 +258,7 @@ const Backend = (() => {
     const { data, error } = await sb.from('profiles').select('id').eq('id', id).maybeSingle();
     if (error) throw error;
     if (data) return false;
+    if (isGuest()) throw new Error('Not joined yet');  // invite-code users are created by join_with_code
     const { error: e2 } = await sb.from('profiles').insert({
       id, uni: info.uni || CONFIG.universities[0].id, campus: info.campus || CONFIG.universities[0].campuses[0].id,
       name: info.name || session.user.email.split('@')[0], joined: Date.now(),
@@ -276,8 +277,27 @@ const Backend = (() => {
     const { data } = await sb.auth.getSession();
     session = data.session;
     if (!session) return false;
+    if (isGuest()) {
+      // Signed in anonymously but never entered a valid invite code: stay on the join screen
+      const { data: p } = await sb.from('profiles').select('id').eq('id', session.user.id).maybeSingle();
+      if (!p) return false;
+    }
     await afterLogin({});
     return true;
+  }
+
+  // ---------- join with an invite code (no email) ----------
+  // The code is checked inside the database (join_with_code in schema.sql), never in this file.
+  const isGuest = () => !!session?.user?.is_anonymous;
+  async function joinWithCode({ code, name, uni, campus }) {
+    if (!session) {
+      const { data, error } = await sb.auth.signInAnonymously();
+      if (error) throw error;
+      session = data.session;
+    }
+    const { error } = await sb.rpc('join_with_code', { p_code: code, p_name: name, p_uni: uni, p_campus: campus });
+    if (error) throw error;
+    return afterLogin({});
   }
   async function signOut() {
     await chain;
@@ -289,5 +309,5 @@ const Backend = (() => {
   const flush = () => chain;
   const uploadCard = (dataUrl) => upload('student-cards', dataUrl);
 
-  return { on, sb, start, sendCode, verifyCode, afterLogin, signOut, queueSync, flush, uploadCard, reload: scheduleReload };
+  return { on, sb, start, sendCode, verifyCode, afterLogin, joinWithCode, isGuest, signOut, queueSync, flush, uploadCard, reload: scheduleReload };
 })();

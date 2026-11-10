@@ -201,7 +201,14 @@ function avatar(u, size = '') {
   if (u?.photo) return `<img class="avatar ${size}" src="${esc(u.photo)}" alt="">`;
   return `<div class="avatar ${size}" style="background:${avatarColor(u?.id)}">${esc(initials(u?.name))}</div>`;
 }
-function verifiedTag(u) { return u?.verified ? `<span class="verified">${ICON.check} Verified student</span>` : '<span class="badge warn">Not verified</span>'; }
+// Invite mode (config.js loginMode: 'invite'): friends join with a code instead of an email
+const INVITE = Backend.on && (window.CAMPUS_CONFIG || {}).loginMode === 'invite';
+// Can post and message: a checked student card, or joined with an invite code
+const canTrade = (u) => !!(u && (u.verified || u.invited));
+function verifiedTag(u) {
+  if (u?.verified) return `<span class="verified">${ICON.check} Verified student</span>`;
+  return u?.invited ? '' : '<span class="badge warn">Not verified</span>';
+}
 function handoffCount(userId) {
   const u = user(userId);
   return (u?.seedHandoffs || 0) + db.threads.filter((t) => t.outcome === 'handed' && (t.sellerId === userId || t.buyerId === userId)).length;
@@ -407,9 +414,11 @@ function viewOnboarding() {
         </ul>
       </div>
       <div class="stack">
-        <button class="btn block" data-act="ob-start">Sign up with university email</button>
+        ${INVITE ? `<button class="btn block" data-act="ob-invite">Join with invite code</button>
+        <p class="muted small center">Ask the friend who shared this link for the code.</p>`
+        : `<button class="btn block" data-act="ob-start">Sign up with university email</button>
         ${Backend.on ? '<button class="btn ghost block" data-act="ob-login">I already have an account</button>'
-          : '<button class="btn ghost block" data-act="ob-demo">Try a demo account</button><p class="muted small center">Demo mode · data stays on this device</p>'}
+          : '<button class="btn ghost block" data-act="ob-demo">Try a demo account</button><p class="muted small center">Demo mode · data stays on this device</p>'}`}
       </div>
     </div>`;
   }
@@ -440,6 +449,26 @@ function viewOnboarding() {
         <div class="hint">Must end in ${esc(uni(o.uni).emailEnding)}</div></label>
       ${o.error ? `<div class="err">${esc(o.error)}</div>` : ''}
       <button class="btn block" ${o.busy ? 'disabled' : ''}>${o.busy ? 'Sending…' : 'Send code'}</button>
+    </form>`;
+  }
+  if (o.step === 'invite') {
+    return `${topbarRaw('Join', 'ob-welcome')}
+    <form class="pad" data-form="ob-invite">
+      <h2>Join with invite code</h2>
+      <p class="muted small">No email needed. Your account stays on this phone or browser.</p>
+      <label class="field"><span>Invite code</span><input name="code" required maxlength="40" autocomplete="off" autocapitalize="characters" value="${esc(o.invite || '')}"></label>
+      <label class="field"><span>Nickname</span>
+        <div class="nick-row"><input name="name" required maxlength="24" value="${esc(o.name)}" placeholder="e.g. Sleepy Panda"><button type="button" class="btn sm light" data-act="nick-random">${ICON.swap} Suggest</button></div>
+        <div class="hint">${NICK_HINT}</div></label>
+      ${o.nickWarn ? `<div class="err">That looks like a real name. For your safety, please use a nickname. (Tap "Join" again to keep it.)</div>` : ''}
+      <label class="field"><span>University</span><select name="uni">
+        ${CONFIG.universities.map((u) => `<option value="${u.id}" ${u.id === o.uni ? 'selected' : ''}>${esc(u.nameJa)} · ${esc(u.name)}</option>`).join('')}
+      </select></label>
+      <label class="field"><span>Your campus</span><select name="campus">
+        ${uni(o.uni).campuses.map((c) => `<option value="${c.id}" ${c.id === o.campus ? 'selected' : ''}>${esc(c.nameJa)} · ${esc(c.name)}</option>`).join('')}
+      </select><div class="hint">You'll see items from your campus first.</div></label>
+      ${o.error ? `<div class="err">${esc(o.error)}</div>` : ''}
+      <button class="btn block" ${o.busy ? 'disabled' : ''}>${o.busy ? 'Joining…' : 'Join'}</button>
     </form>`;
   }
   if (o.step === 'login') {
@@ -716,7 +745,7 @@ function viewHome(u) {
   const chip = (act, v, label, current) => `<button class="chip ${current === v ? 'on' : ''}" data-act="${act}" data-v="${v}">${label}</button>`;
   return `<header class="topbar home">
     <div class="brand-row"><div class="where"><b>${esc(uni(u.uni)?.nameJa)}</b><span>${esc(campusOf(u)?.nameJa)} · students only</span></div>
-      ${u.verified ? '' : '<a class="badge warn" href="#/verify">Verify</a>'}
+      ${canTrade(u) ? '' : '<a class="badge warn" href="#/verify">Verify</a>'}
       ${langBtn()}<a class="logo-link" href="#/home" data-act="home-top" aria-label="Go to home">${logoHTML()}</a></div>
     <div class="search-row">
       <label class="search-box">${ICON.search}<input type="search" enterkeyhint="search" autocomplete="off" placeholder="Search textbooks, rice cookers, bikes…" value="${esc(ui.searchOpen ? ui.searchDraft : f.q)}" data-input="search"></label>
@@ -787,7 +816,7 @@ function viewItem(u, id) {
 
 // ================= post / edit =================
 function viewPost(u, editId) {
-  if (!u.verified) return needVerify('post items');
+  if (!canTrade(u)) return needVerify('post items');
   const l = editId ? listing(editId) : null;
   if (editId && (!l || l.sellerId !== u.id)) return `${topbar('Edit', true)}<div class="empty">You can only edit your own listings.</div>`;
   if (l && ui.editingId !== l.id) { ui.editingId = l.id; ui.draftPhoto = l.photo; }
@@ -1000,7 +1029,8 @@ function viewEditProfile(u) {
       ${uni(u.uni).campuses.map((c) => `<option value="${c.id}" ${c.id === campusOf(u)?.id ? 'selected' : ''}>${esc(c.nameJa)} · ${esc(c.name)}</option>`).join('')}
     </select></label>
     <label class="field"><span>Bio <em>optional</em></span><textarea name="bio" maxlength="200" placeholder="e.g. Free after 4th period. No price negotiation please.">${esc(u.bio || '')}</textarea><div class="hint">Don't write your faculty, year, nationality or where you're from.</div></label>
-    <div class="field"><span class="group-label">University email</span><div class="readonly">${esc(u.email)} ${verifiedTag(u)}</div><div class="hint">Your email can't be changed, because it proves you're a student.</div></div>
+    ${u.email ? `<div class="field"><span class="group-label">University email</span><div class="readonly">${esc(u.email)} ${verifiedTag(u)}</div><div class="hint">Your email can't be changed, because it proves you're a student.</div></div>`
+      : `<div class="demo-note">You joined with an invite code, so this account lives in this browser. If you log out or clear this site's data, you can't get back in.</div>`}
     <button class="btn block">Save profile</button>
   </form>`;
 }
@@ -1029,7 +1059,7 @@ function viewSettings(u) {
     </div>
     <div class="card menu"><h3>Account</h3>
       <a href="#/profile"><span>${ICON.edit} Edit profile</span><span>›</span></a>
-      <a href="#/verify"><span>${ICON.shield} Student verification · ${u.verified ? 'Verified' : 'Not verified'}</span><span>›</span></a>
+      ${u.invited && !u.verified ? '' : `<a href="#/verify"><span>${ICON.shield} Student verification · ${u.verified ? 'Verified' : 'Not verified'}</span><span>›</span></a>`}
       <a href="#/safety"><span>${ICON.shield} Safety tips for meetups</span><span>›</span></a>
       <button data-act="logout"><span>${ICON.logout} Log out</span><span>›</span></button>
       <button data-act="delete-account" class="danger-text"><span>${ICON.x} Delete my account</span><span>›</span></button>
@@ -1110,7 +1140,7 @@ function viewMe(u) {
     <a class="card seller link-card" href="#/user/${u.id}">${avatar(u, 'md')}<div style="flex:1;min-width:0"><b>${esc(u.name)}</b>
       <div class="small muted">${esc(uni(u.uni)?.nameJa)} · ${esc(campusOf(u)?.nameJa)}</div>
       <div class="seller-meta">${verifiedTag(u)} ${ratingHTML(u.id)}</div><div class="small link-text">View my profile</div></div><span class="chev">›</span></a>
-    ${u.verified ? '' : '<a class="btn block" href="#/verify">Verify student card</a>'}
+    ${canTrade(u) ? '' : '<a class="btn block" href="#/verify">Verify student card</a>'}
     <div class="quick-stats">
       <a href="#/user/${u.id}"><b>${mine.filter((l) => l.status !== 'done').length}</b><span>Listed</span></a>
       <a href="#/user/${u.id}"><b>${handoffCount(u.id)}</b><span>Hand-offs</span></a>
@@ -1182,6 +1212,7 @@ const ACTIONS = {
   'ob-welcome': () => { ui.onboard.step = 'welcome'; render(); },
   'ob-back-email': () => { ui.onboard.step = 'email'; ui.onboard.error = ''; render(); },
   'ob-login': () => { ui.onboard.step = 'login'; ui.onboard.error = ''; render(); },
+  'ob-invite': () => { ui.onboard.step = 'invite'; ui.onboard.error = ''; render(); },
   'ob-resend': async () => {
     try { await Backend.sendCode(ui.onboard.email); toast('New code sent'); } catch (e) { toast(friendlyAuthError(e)); }
   },
@@ -1192,6 +1223,7 @@ const ACTIONS = {
     go(el.dataset.back ? '#/' + el.dataset.back : '#/home');
   },
   logout: async () => {
+    if (Backend.on && Backend.isGuest() && !confirm('You joined with an invite code, so this account only lives in this browser. If you log out, you can\'t get back into it. Log out anyway?')) return;
     if (Backend.on) { await Backend.signOut(); db = emptyDb(); ui.onboard = { ...ui.onboard, step: 'welcome', error: '', busy: false }; return go('#/home'); }
     db.currentUserId = null; ui.onboard.step = 'welcome'; save(); go('#/home');
   },
@@ -1308,7 +1340,7 @@ const ACTIONS = {
   'avatar-remove': () => { ui.draftAvatar = null; const keep = Object.fromEntries(new FormData($app.querySelector('form'))); render(); restoreForm(keep); },
   contact: (el) => {
     const u = me();
-    if (!u.verified) return go('#/verify');
+    if (!canTrade(u)) return go('#/verify');
     const l = listing(el.dataset.id);
     if (isBlocked(u, user(l.sellerId))) return toast("You can't contact this student");
     let t = db.threads.find((x) => x.listingId === l.id && x.buyerId === u.id);
@@ -1461,6 +1493,21 @@ const FORMS = {
     if (taken) { db.currentUserId = taken.id; save(); toast('Welcome back, ' + taken.name); return go('#/home'); }
     o.code = String(Math.floor(100000 + Math.random() * 900000));
     o.error = ''; o.step = 'code'; render();
+  },
+  'ob-invite': async (f) => {
+    const o = ui.onboard;
+    o.invite = f.code.value.trim(); o.name = f.name.value.trim(); o.uni = f.uni.value; o.campus = f.campus.value;
+    if (looksLikeRealName(o.name, '') && o.nickWarnFor !== o.name) { o.nickWarn = true; o.nickWarnFor = o.name; o.error = ''; return render(); }
+    o.nickWarn = false; o.busy = true; o.error = ''; render();
+    try {
+      await Backend.joinWithCode({ code: o.invite, name: o.name, uni: o.uni, campus: o.campus });
+      o.busy = false; o.step = 'welcome'; o.invite = '';
+      const u = me();
+      notify(u.id, `Welcome to ${CONFIG.appName}! Post something or say hi to a seller.`, { link: '#/home', icon: 'home', kind: 'account' });
+      logEvent('signup'); save();
+      toast('Welcome, ' + u.name);
+      go('#/home');
+    } catch (e) { o.busy = false; o.error = friendlyAuthError(e); render(); }
   },
   'ob-login': (f) => {
     const o = ui.onboard;
@@ -1706,6 +1753,9 @@ function friendlyAuthError(e) {
   if (/database error saving new user|university email/i.test(m)) return 'Please use your University of Hyogo email (ending in u-hyogo.ac.jp).';
   if (/expired|invalid/i.test(m)) return 'That code is wrong or has expired. Try again or send a new code.';
   if (/signups not allowed/i.test(m)) return 'No account found for that email. Sign up first.';
+  if (/invalid invite code/i.test(m)) return 'That invite code is not right. Check it with the friend who shared the link.';
+  if (/too many tries/i.test(m)) return 'Too many wrong codes. Please wait an hour and try again.';
+  if (/anonymous sign-ins are disabled/i.test(m)) return 'Joining is turned off right now. Ask the friend who shared the link.';
   return m;
 }
 async function sendCodeFor(o, mode) {
