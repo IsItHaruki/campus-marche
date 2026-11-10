@@ -1,0 +1,5 @@
+# Private business notes (stay in the Obsidian vault, not on GitHub)
+*research.md
+.obsidian/
+node_modules/
+.DS_Store
