@@ -1749,13 +1749,13 @@ function restoreForm(values, form = $app.querySelector('form')) {
 // ================= backend helpers =================
 function friendlyAuthError(e) {
   const m = (e && (e.message || e.error_description)) || String(e);
+  if (/invalid invite code/i.test(m)) return 'That invite code is not right. Check it with the friend who shared the link.';
+  if (/too many tries/i.test(m)) return 'Too many wrong codes. Please wait an hour and try again.';
+  if (/anonymous sign-ins are disabled/i.test(m)) return 'Joining is turned off right now. Ask the friend who shared the link.';
   if (/rate limit|too many/i.test(m)) return 'Too many emails sent. Please wait a few minutes and try again.';
   if (/database error saving new user|university email/i.test(m)) return 'Please use your University of Hyogo email (ending in u-hyogo.ac.jp).';
   if (/expired|invalid/i.test(m)) return 'That code is wrong or has expired. Try again or send a new code.';
   if (/signups not allowed/i.test(m)) return 'No account found for that email. Sign up first.';
-  if (/invalid invite code/i.test(m)) return 'That invite code is not right. Check it with the friend who shared the link.';
-  if (/too many tries/i.test(m)) return 'Too many wrong codes. Please wait an hour and try again.';
-  if (/anonymous sign-ins are disabled/i.test(m)) return 'Joining is turned off right now. Ask the friend who shared the link.';
   return m;
 }
 async function sendCodeFor(o, mode) {
