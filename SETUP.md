@@ -78,13 +78,13 @@ Supabase's built-in email sender is for testing only. It sends very few emails p
 
 ## 7. Put it online
 
-The app is already live on GitHub Pages: **https://isitharuki.github.io/campus-marche/**
+The app is live on Vercel: **https://campus-marche-khaki.vercel.app/**
 
-Every push to the `main` branch updates the site within about a minute.
+Vercel is connected to the GitHub repo `IsItHaruki/campus-marche`, and every push to `main` redeploys the site within seconds.
 
 In Supabase → **Authentication → URL Configuration**:
-- **Site URL:** `https://isitharuki.github.io/campus-marche/`
-- **Redirect URLs:** add `https://isitharuki.github.io/campus-marche/**` and `http://localhost:3457/**`
+- **Site URL:** `https://campus-marche-khaki.vercel.app/`
+- **Redirect URLs:** `https://campus-marche-khaki.vercel.app/**` and `http://localhost:3457/**`
 
 Share the link in the LINE group, and students can add it to their home screen.
 

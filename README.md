@@ -2,6 +2,8 @@
 
 A students-only marketplace for 兵庫県立大学 (University of Hyogo). Students buy, sell and give things away, then hand them over on campus. There's no shipping.
 
+**Live:** https://campus-marche-khaki.vercel.app/ (Vercel deploys every push to `main`)
+
 ## Run it locally
 
 - **Demo mode:** open `index.html`. With `config.js` empty, the app uses fake students and keeps data in your browser.
