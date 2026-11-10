@@ -4,6 +4,6 @@
 // rules in supabase/schema.sql are what keep the data safe.
 // Leave them empty to run in demo mode (fake students, data stays in this browser).
 window.CAMPUS_CONFIG = {
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl: 'https://sdncefqhecgcwoeztioo.supabase.co',
+  supabaseAnonKey: 'sb_publishable_ClGXbo6VCavFoRI8WhGT9A_o2s6nNMR',
 };
